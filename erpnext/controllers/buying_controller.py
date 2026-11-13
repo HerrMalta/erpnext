@@ -571,11 +571,152 @@ class BuyingController(SubcontractingController):
 		update_regional_item_valuation_rate(self)
 
 	def get_rejected_valuation_rate(self, row) -> float:
+<<<<<<< HEAD
 		if not frappe.db.get_single_value("Buying Settings", "set_valuation_rate_for_rejected_materials"):
 			return 0.0
 
 		if self.is_internal_transfer() or not flt(row.qty):
 			return flt(row.valuation_rate)
+=======
+		if not is_rejected_material_valued(self.doctype, row.name):
+			return 0.0
+
+		if self.is_internal_transfer() or bills_rejected_quantity(self) or not flt(row.qty):
+			return flt(row.valuation_rate)
+
+		return flt(row.base_net_rate) / (flt(row.conversion_factor) or 1.0)
+
+	def get_valued_stock_qty(self, row):
+		"""Stock qty the net amount of the row was billed for, which is what its valuation spreads
+		over. Each part is rounded as the stock ledger posts it."""
+		if not flt(row.get("rejected_qty")) or not bills_rejected_quantity(self):
+			return get_stock_qty(row, row.qty)
+
+		return get_stock_qty(row, row.qty) + get_stock_qty(row, row.rejected_qty)
+
+	def get_tax_details(self):
+		tax_accounts = []
+		total_valuation_amount = 0.0
+		total_actual_tax_amount = 0.0
+		total_actual_tax_on_stock_items = 0.0
+
+		for d in self.get("taxes"):
+			if d.category not in ["Valuation", "Valuation and Total"]:
+				continue
+
+			multiplier = -1 if d.get("add_deduct_tax") == "Deduct" else 1
+			amount = flt(d.base_tax_amount_after_discount_amount) * multiplier
+
+			if d.charge_type == "On Net Total":
+				total_valuation_amount += amount
+				tax_accounts.append((d.account_head, multiplier))
+			elif d.charge_type == "Actual" and d.get("allocate_full_amount_to_stock_items"):
+				# Allocate the full amount to stock/asset items only (e.g. Freight)
+				total_actual_tax_on_stock_items += amount
+			elif d.charge_type != "On Item Quantity":
+				total_actual_tax_amount += amount
+
+		return tax_accounts, total_valuation_amount, total_actual_tax_amount, total_actual_tax_on_stock_items
+
+	def get_item_tax_amount(self, item, tax_accounts):
+		item_tax_amount = 0.0
+		if item.item_tax_rate:
+			tax_details = json.loads(item.item_tax_rate)
+			for account, multiplier in tax_accounts:
+				rate = tax_details.get(account, 0)
+				if rate == NOT_APPLICABLE_TAX:
+					continue
+
+				net_rate = item.base_net_amount
+				if item.sales_incoming_rate:
+					net_rate = item.qty * item.sales_incoming_rate
+
+				item_tax_amount += flt(net_rate) * flt(rate) / 100 * multiplier
+
+		return item_tax_amount
+
+	def distribute_actual_tax_amount(self, stock_and_asset_items, total_on_all_items, total_on_stock_items):
+		"""Distribute valuation charges other than On Net Total, keyed by row idx.
+
+		`total_on_all_items` is spread across every item by net amount; a non-stock item's
+		share is computed but never capitalized (e.g. a genuine tax). `total_on_stock_items`
+		(flagged `allocate_full_amount_to_stock_items`) is spread across stock/asset items only,
+		so the whole charge is capitalized (e.g. Freight).
+		"""
+		all_items = [d for d in self.get("items") if d.item_code]
+		stock_items = [d for d in all_items if d.item_code in stock_and_asset_items]
+
+		charge_per_item = {}
+		self._spread_charge_over_items(charge_per_item, total_on_all_items, all_items)
+		self._spread_charge_over_items(charge_per_item, total_on_stock_items, stock_items)
+		for tax in self.get("taxes"):
+			if tax.charge_type == "On Item Quantity" and tax.category in ("Valuation", "Valuation and Total"):
+				for item_idx, amount in self.get_quantity_based_tax_amounts(tax).items():
+					charge_per_item[item_idx] = charge_per_item.get(item_idx, 0.0) + amount
+		return charge_per_item
+
+	def get_quantity_based_tax_amounts(self, tax):
+		# Reuse the signed, rounded base amounts calculated for each item.
+		if self.get("_item_wise_tax_details"):
+			return {
+				row.item.idx: flt(row.amount)
+				for row in self.get("_item_wise_tax_details")
+				if row.tax.idx == tax.idx
+			}
+
+		# Revaluation and GL reposting can run on a saved document without recalculating taxes.
+		item_indices = {item.name: item.idx for item in self.get("items")}
+		return {
+			item_indices[row.item_row]: flt(row.amount)
+			for row in self.get("item_wise_tax_details") or []
+			if row.tax_row == tax.name
+		}
+
+	def _spread_charge_over_items(self, charge_per_item, total_charge, items):
+		"""Add each item's proportional share of `total_charge` into `charge_per_item`.
+		Proportion is by net amount (falling back to qty); any rounding remainder is assigned
+		to the last item in the group."""
+		if not total_charge or not items:
+			return
+
+		total_amount = sum(flt(d.base_net_amount) for d in items)
+		chargeable_qty = {d.idx: self.get_chargeable_qty(d) for d in items}
+		total_qty = sum(chargeable_qty.values())
+
+		# Nothing to proportion against (all rows have zero amount and zero qty)
+		if not total_amount and not total_qty:
+			return
+
+		remaining = total_charge
+		for d in items[:-1]:
+			proportion = (
+				flt(d.base_net_amount) / total_amount if total_amount else chargeable_qty[d.idx] / total_qty
+			)
+			charge = flt(proportion * total_charge, self.precision("item_tax_amount", d))
+			charge_per_item[d.idx] = charge_per_item.get(d.idx, 0.0) + charge
+			remaining -= charge
+
+		last = items[-1]
+		charge_per_item[last.idx] = charge_per_item.get(last.idx, 0.0) + flt(
+			remaining, self.precision("item_tax_amount", last)
+		)
+
+	def get_chargeable_qty(self, row) -> float:
+		"""Qty a charge spreads over when no row has a net amount. A receipt row that accepts nothing
+		carries it on its rejected qty, when that material is valued."""
+		if flt(row.qty) or self.doctype != "Purchase Receipt" or self.is_internal_transfer():
+			return flt(row.qty)
+
+		if not frappe.db.get_single_value("Buying Settings", "set_valuation_rate_for_rejected_materials"):
+			return 0.0
+
+		# The returned rejected stock carried the charge only if its receipt row accepted nothing either.
+		if self.is_return and row.purchase_receipt_item:
+			if flt(frappe.db.get_value("Purchase Receipt Item", row.purchase_receipt_item, "qty")):
+				return 0.0
+
+		return flt(row.rejected_qty)
+>>>>>>> aff5816 (fix(stock): leave out a valuation charge the returned rejected stock never carried)
 
 		return flt(row.base_net_rate) / (flt(row.conversion_factor) or 1.0)
 
