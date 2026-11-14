@@ -395,6 +395,55 @@ def filter_batches(batches, doc, item_code, warehouse):
 				del batches[batch_no]
 
 
+<<<<<<< HEAD
+=======
+def get_batch_qty_taken_by_rows(doc, item_code, warehouse):
+	"""(batch_no, stock_qty) the warehouse's rows take by batch_no or, without one, by Serial and Batch Bundle."""
+	# a later row without a warehouse yet may get this one from set_warehouse, item or POS defaults
+	rows = [
+		row
+		for row in [*doc.get("items"), *get_current_packed_items(doc)]
+		if row.get("warehouse") in (None, "", warehouse)
+	]
+	taken = [(row.get("batch_no"), get_row_stock_qty(row, item_code)) for row in rows if row.get("batch_no")]
+
+	bundles = [
+		row.get("serial_and_batch_bundle")
+		for row in rows
+		if not row.get("batch_no") and row.get("serial_and_batch_bundle")
+	]
+	if bundles:
+		entries = frappe.get_all(
+			"Serial and Batch Entry",
+			filters={"parent": ["in", bundles], "batch_no": ["is", "set"]},
+			fields=["batch_no", "qty"],
+		)
+		taken.extend((entry.batch_no, abs(entry.qty)) for entry in entries)
+
+	return taken
+
+
+def get_current_packed_items(doc):
+	"""Packed rows at the qty this save gives them; the rows of a removed bundle row are left out."""
+	from erpnext.stock.doctype.packed_item.packed_item import get_kept_packed_items
+
+	if not doc.get("packed_items"):
+		return []
+
+	if not isinstance(doc, Document):
+		doc = frappe.get_doc(doc)
+
+	precision = frappe.get_precision("Packed Item", "qty")
+	return [
+		frappe._dict(
+			packed_row.as_dict(),
+			qty=flt(qty_per_unit * get_row_stock_qty(item_row, item_row.item_code), precision),
+		)
+		for packed_row, item_row, qty_per_unit in get_kept_packed_items(doc)
+	]
+
+
+>>>>>>> fa1a565 (fix(stock): count packed rows at their current qty when auto-setting a row's batch or serial no)
 def get_row_stock_qty(row, item_code):
 	"""A row's stock_qty and conversion_factor can be missing or stale until validate resets them."""
 	item = frappe.get_cached_value("Item", item_code, ["stock_uom", "sales_uom"], as_dict=True)
@@ -415,8 +464,17 @@ def get_uom_conversion_factor(item_code, uom):
 def get_filtered_serial_nos(serial_nos, doc, table=None):
 	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
+<<<<<<< HEAD
 	if not table:
 		table = "items"
+=======
+	rows = doc.get(table) if table else [*doc.get("items"), *get_current_packed_items(doc)]
+	numbers_by_item = defaultdict(list)
+	for row in rows:
+		item_code = row.get("item_code") or row.get("rm_item_code")
+		if item_code and row.get("serial_no"):
+			numbers_by_item[item_code].extend(get_serial_nos(row.get("serial_no")))
+>>>>>>> fa1a565 (fix(stock): count packed rows at their current qty when auto-setting a row's batch or serial no)
 
 	for row in doc.get(table):
 		if row.get("serial_no"):
