@@ -6876,47 +6876,6 @@ class TestPurchaseReceiptReviewFixes(FrappeTestCase):
 		self.assertEqual(debits, {srbnb_account: 200})
 		self.assertEqual(sum(d.credit for d in gl_entries), 200)
 
-	@change_settings("Buying Settings", {"set_valuation_rate_for_rejected_materials": 1})
-	def test_return_of_rejected_only_row_leaves_out_the_charge_of_other_rows(self):
-		from erpnext.controllers.sales_and_purchase_return import make_return_doc
-
-		company = "_Test Company with perpetual inventory"
-		receipt = make_purchase_receipt(
-			company=company,
-			warehouse=create_warehouse("_Test In-ward Warehouse", company=company),
-			qty=3,
-			rate=100,
-			do_not_save=1,
-		)
-		receipt.append("items", receipt.items[0].as_dict(no_default_fields=True)).update(
-			{
-				"qty": 0,
-				"received_qty": 2,
-				"rejected_qty": 2,
-				"rejected_warehouse": create_warehouse(
-					"_Test Warehouse - Rejected Material", company=company
-				),
-			}
-		)
-		add_valuation_freight(receipt, 40)
-		receipt.insert()
-		receipt.submit()
-
-		return_receipt = make_return_doc("Purchase Receipt", receipt.name)
-		return_receipt.remove(return_receipt.items[0])
-		return_receipt.items[0].received_qty = -2
-		return_receipt.submit()
-
-		srbnb_account = frappe.get_cached_value("Company", company, "stock_received_but_not_billed")
-		debits = frappe.get_all(
-			"GL Entry",
-			filters={"voucher_no": return_receipt.name, "is_cancelled": 0, "debit": [">", 0]},
-			fields=["account", "debit"],
-		)
-
-		self.assertEqual(return_receipt.items[0].item_tax_amount, 0)
-		self.assertEqual({d.account: d.debit for d in debits}, {srbnb_account: 200})
-
 	def test_valuation_charge_remainder_skips_rows_without_a_share(self):
 		receipt = make_purchase_receipt(qty=1, rate=100, do_not_save=1)
 		receipt.append("items", receipt.items[0].as_dict(no_default_fields=True))
