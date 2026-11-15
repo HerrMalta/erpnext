@@ -989,6 +989,7 @@ class PurchaseReceipt(BuyingController):
 
 
 def get_stock_value_difference(voucher_no, voucher_detail_no, warehouse):
+<<<<<<< HEAD
 	return frappe.db.get_value(
 		"Stock Ledger Entry",
 		{
@@ -1368,6 +1369,21 @@ def get_returned_qty_of_rows(items):
 			],
 			group_by="`tabPurchase Receipt Item`.purchase_receipt_item",
 			as_list=1,
+=======
+	"""Stock value the row moved in the warehouse, 0 when it posts nothing there. A row can have
+	two entries in the in-transit warehouse, when its rejected material stays there."""
+	return flt(
+		frappe.db.get_value(
+			"Stock Ledger Entry",
+			{
+				"voucher_type": "Purchase Receipt",
+				"voucher_no": voucher_no,
+				"voucher_detail_no": voucher_detail_no,
+				"warehouse": warehouse,
+				"is_cancelled": 0,
+			},
+			[{"SUM": "stock_value_difference"}],
+>>>>>>> 54df105 (fix(stock): book rejected material that stays in transit at its stock value)
 		)
 	)
 
