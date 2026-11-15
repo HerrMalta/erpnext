@@ -6840,54 +6840,7 @@ class TestPurchaseReceiptReviewFixes(FrappeTestCase):
 		self.assertEqual(sorted(stock_value), [200, 900])
 		self.assertEqual(srbnb_credit, 1000)
 
-<<<<<<< HEAD
-=======
-	@ERPNextTestSuite.change_settings("Buying Settings", {"set_valuation_rate_for_rejected_materials": 1})
-	def test_valuation_charge_on_receipt_with_only_rejected_qty(self):
-		company = "_Test Company with perpetual inventory"
-		rejected_warehouse = create_warehouse("_Test Warehouse - Rejected Material", company=company)
-		receipt = make_purchase_receipt(
-			company=company,
-			warehouse=create_warehouse("_Test In-ward Warehouse", company=company),
-			rejected_warehouse=rejected_warehouse,
-			qty=0,
-			rejected_qty=2,
-			rate=100,
-			do_not_save=1,
-		)
-		receipt.append(
-			"taxes",
-			{
-				"account_head": "Expenses Included In Valuation - TCP1",
-				"add_deduct_tax": "Add",
-				"category": "Valuation",
-				"charge_type": "Actual",
-				"cost_center": "Main - TCP1",
-				"description": "Freight",
-				"tax_amount": 10,
-			},
-		)
-		receipt.insert()
-		receipt.submit()
-
-		stock_value = frappe.db.get_value(
-			"Stock Ledger Entry",
-			{"voucher_no": receipt.name, "warehouse": rejected_warehouse, "is_cancelled": 0},
-			"stock_value_difference",
-		)
-		gl_entries = frappe.get_all(
-			"GL Entry",
-			filters={"voucher_no": receipt.name, "is_cancelled": 0},
-			fields=["account", "debit", "credit"],
-		)
-		srbnb_account = frappe.get_cached_value("Company", company, "stock_received_but_not_billed")
-		credits = {d.account: d.credit for d in gl_entries if d.credit}
-
-		self.assertEqual(stock_value, 210)
-		self.assertEqual(sum(d.debit for d in gl_entries), 210)
-		self.assertEqual(credits, {srbnb_account: 200, "Expenses Included In Valuation - TCP1": 10})
-
-	@ERPNextTestSuite.change_settings("Buying Settings", {"set_valuation_rate_for_rejected_materials": 1})
+	@change_settings("Buying Settings", {"set_valuation_rate_for_rejected_materials": 1})
 	def test_return_of_rejected_qty_leaves_out_the_accepted_valuation_charge(self):
 		from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
@@ -6923,10 +6876,7 @@ class TestPurchaseReceiptReviewFixes(FrappeTestCase):
 		self.assertEqual(debits, {srbnb_account: 200})
 		self.assertEqual(sum(d.credit for d in gl_entries), 200)
 
-<<<<<<< HEAD
->>>>>>> 54007fc (test: return of rejected qty leaves out the accepted valuation charge)
-=======
-	@ERPNextTestSuite.change_settings("Buying Settings", {"set_valuation_rate_for_rejected_materials": 1})
+	@change_settings("Buying Settings", {"set_valuation_rate_for_rejected_materials": 1})
 	def test_return_of_rejected_only_row_leaves_out_the_charge_of_other_rows(self):
 		from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
@@ -6966,9 +6916,6 @@ class TestPurchaseReceiptReviewFixes(FrappeTestCase):
 		self.assertEqual(return_receipt.items[0].item_tax_amount, 0)
 		self.assertEqual({d.account: d.debit for d in debits}, {srbnb_account: 200})
 
-<<<<<<< HEAD
->>>>>>> c191af4 (test: return of a rejected-only row leaves out the charge of other rows)
-=======
 	def test_valuation_charge_remainder_skips_rows_without_a_share(self):
 		receipt = make_purchase_receipt(qty=1, rate=100, do_not_save=1)
 		receipt.append("items", receipt.items[0].as_dict(no_default_fields=True))
@@ -6991,7 +6938,6 @@ class TestPurchaseReceiptReviewFixes(FrappeTestCase):
 
 		self.assertEqual([d.item_tax_amount for d in receipt.items], [0.02, 0.03, 0])
 
->>>>>>> 8b46bc9 (test: valuation charge remainder skips rows without a share)
 	def test_landed_cost_of_returned_goods_is_not_posted_to_srbnb(self):
 		from erpnext.stock.doctype.landed_cost_voucher.test_landed_cost_voucher import (
 			create_landed_cost_voucher,
