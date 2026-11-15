@@ -6904,6 +6904,7 @@ class TestPurchaseReceiptReviewFixes(FrappeTestCase):
 
 		return_receipt = make_return_doc("Purchase Receipt", receipt.name)
 		return_receipt.remove(return_receipt.items[0])
+		return_receipt.items[0].received_qty = -2
 		return_receipt.submit()
 
 		srbnb_account = frappe.get_cached_value("Company", company, "stock_received_but_not_billed")
