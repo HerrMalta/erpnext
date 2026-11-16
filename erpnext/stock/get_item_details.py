@@ -509,17 +509,7 @@ def get_used_serial_nos(doc, table=None):
 	"""Serial nos held by the rows of ``table``, or of the items and packed items."""
 	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
-<<<<<<< HEAD
-	rows = doc.get(table) if table else [*doc.get("items"), *(doc.get("packed_items") or [])]
-=======
 	rows = doc.get(table) if table else [*doc.get("items"), *get_current_packed_items(doc)]
-	numbers_by_item = defaultdict(list)
-	for row in rows:
-		item_code = row.get("item_code") or row.get("rm_item_code")
-		if item_code and row.get("serial_no"):
-			numbers_by_item[item_code].extend(get_serial_nos(row.get("serial_no")))
-
->>>>>>> fa1a565 (fix(stock): count packed rows at their current qty when auto-setting a row's batch or serial no)
 	used = set()
 	for row in rows:
 		if row.get("serial_no"):
