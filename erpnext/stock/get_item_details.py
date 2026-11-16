@@ -352,7 +352,8 @@ def set_serial_nos_for_outward(ctx, out, kwargs, doc):
 	if out.has_batch_no and batch_no:
 		kwargs["batches"] = [batch_no]
 
-	serial_nos = get_filtered_serial_nos(get_serial_nos_for_outward(kwargs), doc)
+	kwargs["ignore_serial_nos"] = [*(kwargs.get("ignore_serial_nos") or []), *get_used_serial_nos(doc)]
+	serial_nos = get_serial_nos_for_outward(kwargs)
 	out["serial_no"] = "\n".join(serial_nos[: cint(out.stock_qty)])
 
 
@@ -385,7 +386,7 @@ def get_batch_no_covering_qty(kwargs, doc, qty):
 
 def filter_batches(batches, doc, item_code, warehouse):
 	precision = frappe.get_precision("Serial and Batch Entry", "qty")
-	for row in [*doc.get("items"), *(doc.get("packed_items") or [])]:
+	for row in [*doc.get("items"), *get_current_packed_items(doc)]:
 		batch_no = row.get("batch_no")
 		# a later row without a warehouse yet may get this one from set_warehouse, item or POS defaults
 		if batch_no in batches and row.get("warehouse") in (None, "", warehouse):
@@ -393,34 +394,6 @@ def filter_batches(batches, doc, item_code, warehouse):
 			batches[batch_no] = flt(batches[batch_no] - stock_qty, precision)
 			if batches[batch_no] <= 0:
 				del batches[batch_no]
-
-
-<<<<<<< HEAD
-=======
-def get_batch_qty_taken_by_rows(doc, item_code, warehouse):
-	"""(batch_no, stock_qty) the warehouse's rows take by batch_no or, without one, by Serial and Batch Bundle."""
-	# a later row without a warehouse yet may get this one from set_warehouse, item or POS defaults
-	rows = [
-		row
-		for row in [*doc.get("items"), *get_current_packed_items(doc)]
-		if row.get("warehouse") in (None, "", warehouse)
-	]
-	taken = [(row.get("batch_no"), get_row_stock_qty(row, item_code)) for row in rows if row.get("batch_no")]
-
-	bundles = [
-		row.get("serial_and_batch_bundle")
-		for row in rows
-		if not row.get("batch_no") and row.get("serial_and_batch_bundle")
-	]
-	if bundles:
-		entries = frappe.get_all(
-			"Serial and Batch Entry",
-			filters={"parent": ["in", bundles], "batch_no": ["is", "set"]},
-			fields=["batch_no", "qty"],
-		)
-		taken.extend((entry.batch_no, abs(entry.qty)) for entry in entries)
-
-	return taken
 
 
 def get_current_packed_items(doc):
@@ -443,19 +416,15 @@ def get_current_packed_items(doc):
 	]
 
 
-<<<<<<< HEAD
->>>>>>> fa1a565 (fix(stock): count packed rows at their current qty when auto-setting a row's batch or serial no)
-=======
 def get_bundle_row_stock_qty(item_row):
 	"""The stock_qty set_qty_as_per_stock_uom gives a bundle row, which packing scales its components by."""
 	stock_qty = get_row_stock_qty(item_row, item_row.item_code)
-	if frappe.get_single_value("Stock Settings", "allow_to_edit_stock_uom_qty_for_sales"):
+	if frappe.db.get_single_value("Stock Settings", "allow_to_edit_stock_uom_qty_for_sales"):
 		return flt(stock_qty, item_row.precision("stock_qty"))
 
 	return stock_qty
 
 
->>>>>>> c3526aa (fix(stock): round a bundle row's stock qty as packing does when counting its packed rows)
 def get_row_stock_qty(row, item_code):
 	"""A row's stock_qty and conversion_factor can be missing or stale until validate resets them."""
 	item = frappe.get_cached_value("Item", item_code, ["stock_uom", "sales_uom"], as_dict=True)
@@ -474,27 +443,21 @@ def get_uom_conversion_factor(item_code, uom):
 
 
 def get_filtered_serial_nos(serial_nos, doc, table=None):
+	used = get_used_serial_nos(doc, table)
+	return [serial_no for serial_no in serial_nos if serial_no not in used]
+
+
+def get_used_serial_nos(doc, table=None):
+	"""Serial nos held by the rows of ``table``, or of the items and packed items."""
 	from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
-<<<<<<< HEAD
-	if not table:
-		table = "items"
-=======
 	rows = doc.get(table) if table else [*doc.get("items"), *get_current_packed_items(doc)]
-	numbers_by_item = defaultdict(list)
+	used = set()
 	for row in rows:
-		item_code = row.get("item_code") or row.get("rm_item_code")
-		if item_code and row.get("serial_no"):
-			numbers_by_item[item_code].extend(get_serial_nos(row.get("serial_no")))
->>>>>>> fa1a565 (fix(stock): count packed rows at their current qty when auto-setting a row's batch or serial no)
-
-	for row in doc.get(table):
 		if row.get("serial_no"):
-			for serial_no in get_serial_nos(row.get("serial_no")):
-				if serial_no in serial_nos:
-					serial_nos.remove(serial_no)
+			used.update(get_serial_nos(row.get("serial_no")))
 
-	return serial_nos
+	return used
 
 
 def process_args(args):
