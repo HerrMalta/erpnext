@@ -1971,6 +1971,7 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 			is_internal_supplier = 0
 			return_against = None
 			project = None
+			get_transit_stock_value = PurchaseInvoice.get_transit_stock_value
 
 			def __init__(self, is_return, defaults):
 				self.is_return = is_return
