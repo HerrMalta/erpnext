@@ -3090,21 +3090,6 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 		self.assertEqual(flt(moved_value[to_warehouse]), 700)
 		self.assertEqual(flt(moved_value[rejected_warehouse]), 300)
 
-<<<<<<< HEAD
-	def test_internal_transfer_invoice_with_every_unit_rejected(self):
-		"""An invoice may reject a whole row, and the in-transit warehouse is emptied all the same."""
-		from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_inter_company_purchase_invoice
-=======
-		booked_value = {}
-		for entry in get_gl_entries("Purchase Invoice", pi.name, skip_cancelled=True):
-			booked_value.setdefault(entry.account, 0)
-			booked_value[entry.account] += flt(entry.debit) - flt(entry.credit)
-
-		self.assertEqual(flt(sum(booked_value.values()), 2), 0)
-		self.assertEqual(booked_value[get_inventory_account(company, transit_warehouse)], -1000)
-		self.assertEqual(booked_value[get_inventory_account(company, to_warehouse)], 700)
-		self.assertEqual(booked_value[get_inventory_account(company, rejected_warehouse)], 300)
-
 	def test_internal_transfer_invoice_credits_transit_with_its_stock_value(self):
 		"""A stock updating internal transfer invoice in a non-stock UOM, and its return, book the
 		in-transit account with the stock value that moved through the in-transit warehouse."""
@@ -3146,11 +3131,9 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 				flt(stock_entry.stock_value_difference, 2),
 			)
 
-	def test_return_of_an_internal_transfer_invoice_that_rejected_everything(self):
-		"""Material rejected in full goes back to the in-transit warehouse at the rate it came in
-		with, and the entries say the same as the stock."""
-		from erpnext.accounts.doctype.sales_invoice.mapper import make_inter_company_purchase_invoice
->>>>>>> f2977df (test: internal transfer invoice credits transit with its stock value)
+	def test_internal_transfer_invoice_with_every_unit_rejected(self):
+		"""An invoice may reject a whole row, and the in-transit warehouse is emptied all the same."""
+		from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_inter_company_purchase_invoice
 		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 		from erpnext.stock.doctype.item.test_item import create_item
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import (
@@ -4479,36 +4462,12 @@ def make_purchase_invoice(**args):
 	return pi
 
 
-<<<<<<< HEAD
-=======
-def make_fully_rejected_stock_invoice():
-	"""A stock updating invoice that rejects both units of its only row, at 100 each."""
-	from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
-
-	company = "_Test Company with perpetual inventory"
-	rejected_warehouse = create_warehouse("_Test Fully Rejected Invoice Warehouse", company=company)
-	pi = make_purchase_invoice(
-		company=company,
-		item_code=make_item(properties={"is_stock_item": 1}).name,
-		warehouse="Stores - TCP1",
-		qty=0,
-		rejected_qty=2,
-		received_qty=2,
-		rate=100,
-		rejected_warehouse=rejected_warehouse,
-		update_stock=1,
-		cost_center="Main - TCP1",
-		do_not_save=True,
-	)
-	pi.submit()
-	return pi
-
-
 def make_internal_transfer_invoice():
 	"""A stock updating internal transfer invoice of 6 Box (0.3356 Kg each, 100 per Kg), received
 	from an in-transit warehouse."""
-	from erpnext.accounts.doctype.sales_invoice.mapper import make_inter_company_purchase_invoice
+	from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_inter_company_purchase_invoice
 	from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
+	from erpnext.stock.doctype.item.test_item import make_item
 	from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 
 	company = "_Test Company with perpetual inventory"
@@ -4552,7 +4511,6 @@ def make_internal_transfer_invoice():
 	return pi
 
 
->>>>>>> f029038 (test: landed cost on an internal transfer invoice goes into the accepted warehouse)
 def make_purchase_invoice_against_cost_center(**args):
 	pi = frappe.new_doc("Purchase Invoice")
 	args = frappe._dict(args)
